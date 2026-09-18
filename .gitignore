@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project-specific: downloaded BEIR datasets (large, re-downloadable)
+datasets/
+*.zip
