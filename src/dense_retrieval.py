@@ -28,6 +28,7 @@ from beir.retrieval.evaluation import EvaluateRetrieval
 from beir.retrieval.search.dense import DenseRetrievalExactSearch as DRES
 
 DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+RESULTS_DIR = os.path.join(pathlib.Path(__file__).resolve().parent.parent, "results")
 
 
 def load_dataset(dataset: str, split: str):
@@ -48,13 +49,34 @@ def run_dense_retrieval(dataset: str, split: str, model_name: str, batch_size: i
     print(f"  corpus documents: {len(corpus)}")
     print(f"  queries: {len(queries)}")
 
+    # === THIS IS WHERE THE TRANSFORMER MODEL LOADS ===
+    # `model_name` (default: "sentence-transformers/all-MiniLM-L6-v2") is a
+    # sentence-transformers model — under the hood it IS a Transformer: a
+    # distilled/compact BERT-style encoder (MiniLM), the same neural network
+    # architecture behind BERT/GPT, just much smaller so it runs fast on CPU.
+    # `models.SentenceBERT(...)` downloads its pretrained weights from
+    # HuggingFace and wraps it so BEIR can call it. `DRES` (Dense Retrieval
+    # Exact Search) is BEIR's helper that uses this Transformer to:
+    #   1. Run every document's text through the Transformer -> one 384-dim
+    #      vector per document (this is "embedding").
+    #   2. Run every query's text through the SAME Transformer -> one
+    #      384-dim vector per query.
+    # No manual encoding loop is needed here — retriever.retrieve() below
+    # calls the Transformer internally for both steps.
     print(f"Loading embedding model '{model_name}' ...")
     model = DRES(models.SentenceBERT(model_name), batch_size=batch_size)
     retriever = EvaluateRetrieval(model, score_function="cos_sim")
 
+    # This line is the actual "retrieval": it (a) embeds every doc + query
+    # through the Transformer loaded above, then (b) for each query, ranks
+    # all documents by cosine similarity between their vectors. High
+    # cosine similarity = the Transformer judged them semantically close.
     print("Embedding + retrieving (this is the slow step, CPU-only) ...")
     results = retriever.retrieve(corpus, queries)
 
+    # Compare the Transformer-produced ranking against qrels (the gold/
+    # correct relevant documents for each query) and compute standard IR
+    # metrics at multiple cutoffs (@1, @3, @5, @10, @100, @1000).
     print("Evaluating against qrels ...")
     ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
     mrr = retriever.evaluate_custom(qrels, results, retriever.k_values, metric="mrr")
@@ -64,8 +86,8 @@ def run_dense_retrieval(dataset: str, split: str, model_name: str, batch_size: i
     print("Recall:", recall)
     print("MRR:", mrr)
 
-    os.makedirs("results", exist_ok=True)
-    out_path = f"results/dense_{dataset}_{split}.json"
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    out_path = os.path.join(RESULTS_DIR, f"dense_{dataset}_{split}.json")
     with open(out_path, "w") as f:
         json.dump(
             {

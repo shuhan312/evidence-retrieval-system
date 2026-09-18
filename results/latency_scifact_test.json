@@ -1,0 +1,9 @@
+{
+  "dataset": "scifact",
+  "split": "test",
+  "num_queries_timed": 30,
+  "dense_median_seconds": 0.020682562491856515,
+  "dense_plus_rerank_median_seconds": 0.7393465005443431,
+  "rerank_overhead_seconds": 0.7186639380524866,
+  "bm25_latency": "not measured: rank_bm25 is a lightweight full-scan implementation, not a production inverted index \u2014 timing it would misrepresent the BM25 algorithm"
+}
